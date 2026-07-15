@@ -611,9 +611,16 @@ impl CoinbaseCache {
         map.retain(|&(h, _), _| h == height);
         // Only 2 entries are ever useful (zero-fee fake + current real-fee coinbase), but mempool
         // fee churn can accumulate stale entries within a block. Cap at 4 to stay well above the
-        // useful set while preventing unbounded growth.
-        if map.len() > 4 {
-            map.clear();
+        // useful set while preventing unbounded growth. When evicting, preserve the zero-fee sizing
+        // coinbase — losing it recreates the churn this cache exists to prevent.
+        if !map.contains_key(&(height, fee)) && map.len() >= 4 {
+            let evict_key = map
+                .keys()
+                .copied()
+                .find(|&(_, f)| f != Amount::<NonNegative>::zero());
+            if let Some(key) = evict_key {
+                map.remove(&key);
+            }
         }
         map.insert((height, fee), coinbase);
     }
